@@ -92,7 +92,7 @@ Fotografía de los integrantes durante el proceso de diseño y ensamblaje de la 
 
 ### Diagrama de Conexión del Dispositivo
 
-Esquema de distribución sobre protoboard acoplada del módulo ESP32, sensor analógico NTC, buzzer, resistencias, switches de simulación y pantalla LCD:
+Esquema de distribución hecho en **Wokwi** sobre protoboard acoplada del módulo ESP32, sensor analógico NTC, buzzer, resistencias, switches de simulación y pantalla LCD:
 
 <img src="./Fotos/DiagramaDispositivo.PNG" width="600">
 
