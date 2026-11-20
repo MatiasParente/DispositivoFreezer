@@ -6,10 +6,6 @@
 #include <DallasTemperature.h>
 #include <ArduinoJson.h>
 
-// ============================================================
-// DECLARACIONES ADELANTADAS DE FUNCIONES (FORWARD DECLARATIONS)
-// ============================================================
-
 bool verificarModemAT();
 bool verificarSIM();
 bool verificarRed();
@@ -19,22 +15,18 @@ bool enviarSMS(const String& mensaje, bool esEventoPrioritario = false, bool esP
 void ejecutarEnvioTelemetria(const String& motivo);
 String generarMensajeSMS(String tipoAlerta);
 
-// ============================================================
-// CONFIGURACIÓN GENERAL
-// ============================================================
+// configuración general
 
-const char* WIFI_SSID = "Parentes-2.4GHz";
-const char* WIFI_PASSWORD = "";
+const char* WIFI_SSID = ""; //SSID del internet (nombre del wifi)
+const char* WIFI_PASSWORD = ""; //contraseña
 
-const char* SERVER_URL = "https://tip-proymf26.tipyenaccion.net/api/telemetry";
-const char* API_KEY = "";
+const int DEVICE_ID = 1; //identificación del dispositivo, cambia el número para ser otro dispositivo independiente
 
-const int DEVICE_ID = 1;
+const char* SERVER_URL = "https://tip-proymf26.tipyenaccion.net/api/telemetry"; //url para el servidor
+const char* API_KEY = "fg_sec_9nQBt2sF1bLJAEGlR"; //api key (leer manual de instalación)
 
-// ============================================================
+
 // MODEM A7670G
-// ============================================================
-
 #define MODEM_RX 16
 #define MODEM_TX 17
 
@@ -47,9 +39,7 @@ HardwareSerial modem(2);
 
 bool modemOk = false;
 
-// ============================================================
-// PINES DE HARDWARE
-// ============================================================
+// pines del esp32
 
 const int PIN_DS18B20 = 21;
 const int PIN_DETECTOR = 22;
@@ -58,14 +48,12 @@ const int LED_VERDE = 5;
 const int LED_ROJO = 19;
 const int PIN_BUZZER = 23;
 
-// Lógica 4N25 con INPUT_PULLUP:
-// HIGH = transistor abierto (Corte de corriente / operando en batería)
-// LOW  = transistor conduciendo (Corriente de red activa)
+// Lógica 4N25
+// HIGH = Corte de corriente / operando en batería
+// LOW  = Corriente electrica activa
 const int VALOR_CORTE = HIGH;
 
-// ============================================================
-// CONFIGURACIÓN RECIBIDA DEL SERVIDOR
-// ============================================================
+// configuración del servidor
 
 float temp_min_segura = -25.0;
 float temp_max_segura = -10.0;
@@ -74,15 +62,13 @@ bool alerta_temperatura_activa = true;
 bool alerta_bateria_activa = true;
 bool alerta_vencimiento_activa = true;
 bool alerta_modem_activa = true;
-bool envio_sms_activo = true; // Interruptor general de SMS recibido del backend
+bool envio_sms_activo = true;
 
-String plantilla_sms_cuerpo = "ALERTA FREEZERGUARD: Se detectó {tipo_alerta} en {dispositivo}. Temp: {temperatura} C.";
+String plantilla_sms_cuerpo = "ALERTA FREEZERGUARD: Se detectó {tipo_alerta} en {dispositivo}. Temp: {temperatura} C."; //sms a enviar
 
 int intervalo_telemetria = 5;
 
-// ============================================================
-// TEMPORIZADORES Y ANTI-SPAM (PROTECCIÓN DE SIM)
-// ============================================================
+// protección para el sim, se ponen protecciones anti spam de mensajes asi evitamos que se bloquen.
 
 unsigned long previoMillis = 0;
 unsigned long previoBuzzerMillis = 0;
@@ -90,22 +76,19 @@ unsigned long previoImpresion = 0;
 unsigned long previoLecturaTemp = 0;
 unsigned long previoModemCheck = 0;
 
-// Cooldown de envío de SMS para alertas periódicas/temperatura
+// Tiempo de espera de envío de SMS para alertas periódicas/temperatura
 unsigned long ultimoEnvioSMS = 0;
-const unsigned long COOLDOWN_SMS_MS = 60000; // 60 segundos mínimos entre SMS generales
-const unsigned long INTERVALO_MODEM_CHECK_MS = 60000; // Health check del módem cada 60s
+const unsigned long COOLDOWN_SMS_MS = 60000; // 60 segundos mínimos entre SMS
+const unsigned long INTERVALO_MODEM_CHECK_MS = 60000; // revisar el estado del módem cada 60s
 
-// Debounce del detector 4N25 (2500ms para evitar falsos positivos por capacitores de fuente)
+// Tiempo de espera del detector 4N25 (2500ms para evitar falsos positivos)
 unsigned long ultimoCambioDetector = 0;
 int ultimoEstadoLectura = LOW;
-const unsigned long TIEMPO_DEBOUNCE_CORTE_MS = 2500; // 2.5 segundos de estabilidad requeridos
+const unsigned long TIEMPO_DEBOUNCE_CORTE_MS = 2500; // 2.5 segundos
 
 bool estadoBuzzer = false;
 
-// ============================================================
-// ESTADO DEL DISPOSITIVO
-// ============================================================
-
+// estado del dispositivo
 float temperaturaActual = 0.0;
 float ultimaLecturaValidaTemp = 0.0;
 int lecturasFallidasTemp = 0;
@@ -114,24 +97,18 @@ bool enBateriaEnclavado = false;
 bool estadoBateriaAnterior = false;
 bool alertaTempSMSActiva = false; // Estado para controlar disparo de SMS por temperatura
 
-// ============================================================
-// SENSOR DE TEMPERATURA
-// ============================================================
+// sensor de temperatura
 
 OneWire oneWire(PIN_DS18B20);
 DallasTemperature sensors(&oneWire);
 
-// ============================================================
-// FUNCIONES AUXILIARES DEL MÓDEM
-// ============================================================
-
+//otras cosas del modem
 void limpiarBufferModem() {
     while (modem.available()) {
         modem.read();
     }
 }
 
-// ------------------------------------------------------------
 
 bool esperarRespuesta(
     const String& respuestaOK,
@@ -155,13 +132,11 @@ bool esperarRespuesta(
                 return false;
             }
         }
-        delay(5); // Previene sobrecarga de CPU y Watchdog Reset (WDT)
+        delay(5);
     }
 
     return false;
 }
-
-// ------------------------------------------------------------
 
 bool enviarAT(
     const String& comando,
@@ -178,9 +153,7 @@ bool enviarAT(
     return esperarRespuesta(respuestaOK, "ERROR", timeout);
 }
 
-// ============================================================
-// GENERAR MENSAJE DE ALERTA CON PLANTILLA DE LA PÁGINA WEB
-// ============================================================
+// generar sms de alerta segun lo recibido de la aplicación web
 
 String generarMensajeSMS(String tipoAlerta) {
     if (plantilla_sms_cuerpo.length() == 0) {
@@ -197,10 +170,7 @@ String generarMensajeSMS(String tipoAlerta) {
     return msg;
 }
 
-// ============================================================
-// VERIFICACIÓN DEL MÓDEM
-// ============================================================
-
+//verificación del modem
 bool verificarModemAT() {
     limpiarBufferModem();
     modem.println("AT");
@@ -223,10 +193,7 @@ bool verificarModemAT() {
     return false;
 }
 
-// ============================================================
-// VERIFICACIÓN DE SIM
-// ============================================================
-
+//verificación del sim
 bool verificarSIM() {
     limpiarBufferModem();
     modem.println("AT+CPIN?");
@@ -254,10 +221,7 @@ bool verificarSIM() {
     return false;
 }
 
-// ============================================================
-// VERIFICACIÓN DE RED
-// ============================================================
-
+//verificación de red
 bool verificarRed() {
     limpiarBufferModem();
     modem.println("AT+CEREG?");
@@ -271,7 +235,6 @@ bool verificarRed() {
             respuesta += c;
             Serial.write(c);
 
-            // Registrado en red local o roaming
             if (respuesta.indexOf("+CEREG: 0,1") >= 0 ||
                 respuesta.indexOf("+CEREG: 1,1") >= 0 ||
                 respuesta.indexOf("+CEREG: 0,5") >= 0 ||
@@ -285,10 +248,7 @@ bool verificarRed() {
     return false;
 }
 
-// ============================================================
-// HEALTH CHECK DEL MÓDEM (CADA 60 SEGUNDOS, FUERA DE TELEMETRÍA)
-// ============================================================
-
+//Verificar estado del modem
 void verificarSaludModem() {
     if (millis() - previoModemCheck < INTERVALO_MODEM_CHECK_MS && previoModemCheck != 0) {
         return;
@@ -310,10 +270,7 @@ void verificarSaludModem() {
     }
 }
 
-// ============================================================
-// INICIALIZACIÓN DEL MÓDEM
-// ============================================================
-
+//iniciamos el modulo sms
 bool inicializarModemSMS() {
     Serial.println();
     Serial.println("========================================");
@@ -389,10 +346,7 @@ bool inicializarModemSMS() {
     return true;
 }
 
-// ============================================================
-// ENVÍO DE SMS (CON PROTECCIÓN ANTI-BLOQUEO SIM Y PRIORIZACIÓN)
-// ============================================================
-
+// enviar sms
 bool enviarSMS(const String& mensaje, bool esEventoPrioritario, bool esPrueba) {
     if (!modemOk) {
         // Intento rápido de recuperación antes de cancelar
@@ -415,9 +369,7 @@ bool enviarSMS(const String& mensaje, bool esEventoPrioritario, bool esPrueba) {
         return false;
     }
 
-    // --------------------------------------------------------
-    // PROTECCIÓN DE SIM: Cooldown de tiempo (Se salta en eventos de corte/restauración y pruebas)
-    // --------------------------------------------------------
+    //para proteger el sim
     unsigned long ahora = millis();
     if (!esPrueba && !esEventoPrioritario && (ahora - ultimoEnvioSMS < COOLDOWN_SMS_MS) && ultimoEnvioSMS != 0) {
         Serial.print("[SMS] PROTECCIÓN SIM: Cooldown activo. Omitiendo envío. Debe esperar ");
@@ -502,7 +454,7 @@ bool enviarSMS(const String& mensaje, bool esEventoPrioritario, bool esPrueba) {
             Serial.write(c);
 
             if (respuesta.indexOf("+CMGS:") >= 0) {
-                // Actualizar cooldown SOLO cuando el envío fue verificado y exitoso por la red
+                // Actualizar cooldown solo cuando el envío fue verificado y exitoso por la red
                 if (!esPrueba) {
                     ultimoEnvioSMS = millis();
                 }
@@ -526,19 +478,13 @@ bool enviarSMS(const String& mensaje, bool esEventoPrioritario, bool esPrueba) {
     return false;
 }
 
-// ============================================================
-// SMS DE INICIO (HARDCODEADO POR DEFECTO)
-// ============================================================
-
+//Sms de prueba al inicio para probar
 void enviarSMSInicio() {
     String mensaje = "FREEZERGUARD: inicio correcto.\nDispositivo operativo.\nTemp: " + String(temperaturaActual, 1) + " C";
     enviarSMS(mensaje, false, false);
 }
 
-// ============================================================
-// SMS DE PRUEBA (HARDCODEADO POR DEFECTO)
-// ============================================================
-
+//sms de prueba cuando se da click a probar sms
 void enviarSMSPrueba() {
     Serial.println();
     Serial.println("========================================");
@@ -552,9 +498,7 @@ void enviarSMSPrueba() {
     enviarSMS(mensaje, false, true);
 }
 
-// ============================================================
-// SMS DE CORTE / RESTAURACIÓN
-// ============================================================
+// Sms de corte de corriente y restauración
 
 void enviarSMSAlertaCorte(bool hayCorte) {
     if (!alerta_bateria_activa) {
@@ -564,21 +508,18 @@ void enviarSMSAlertaCorte(bool hayCorte) {
 
     String mensaje = "";
     if (hayCorte) {
-        // Alerta inicial: usa la plantilla configurada en la página web
+        // Usa la plantilla configurada en la página web
         mensaje = generarMensajeSMS("CORTE DE CORRIENTE");
     } else {
-        // Mensaje de confirmación/resolución: HARDCODED por defecto
+        // Mensaje de confirmación
         mensaje = "FREEZERGUARD: CORRIENTE RESTAURADA.\nEl dispositivo vuelve a funcionar con red. Temp: " + String(temperaturaActual, 1) + " C";
     }
 
-    // Permite enviar corte y restauración sin trabarse por cooldown (esEventoPrioritario = true)
+    // Permite enviar corte y restauración sin trabarse por cooldown
     enviarSMS(mensaje, true, false);
 }
 
-// ============================================================
-// ALERTA DE TEMPERATURA POR SMS
-// ============================================================
-
+//alerta de temperatura por sms
 void verificarAlertaTemperaturaSMS() {
     if (!alerta_temperatura_activa) {
         alertaTempSMSActiva = false;
@@ -592,12 +533,12 @@ void verificarAlertaTemperaturaSMS() {
 
         String mensaje = "";
         if (fueraDeRango) {
-            // Alerta inicial: usa la plantilla configurada en la página web
+            // usa la plantilla configurada en la página web
             mensaje = generarMensajeSMS("TEMPERATURA FUERA DE RANGO");
             enviarSMS(mensaje, false, false);
             ejecutarEnvioTelemetria("ALERTA_TEMPERATURA");
         } else {
-            // Mensaje de confirmación/resolución: HARDCODED por defecto
+            // Mensaje de confirmación
             mensaje = "FREEZERGUARD: TEMPERATURA RESTAURADA.\nLa temperatura volvio al rango seguro. Temp: " + String(temperaturaActual, 1) + " C";
             enviarSMS(mensaje, false, false);
             ejecutarEnvioTelemetria("TEMPERATURA_NORMALIZADA");
@@ -605,10 +546,7 @@ void verificarAlertaTemperaturaSMS() {
     }
 }
 
-// ============================================================
-// CONEXIÓN WIFI
-// ============================================================
-
+//conexión al internet
 void conectarWiFi() {
     if (WiFi.status() == WL_CONNECTED) {
         return;
@@ -637,10 +575,7 @@ void conectarWiFi() {
     }
 }
 
-// ============================================================
-// PROCESAR RESPUESTA DEL SERVIDOR
-// ============================================================
-
+// respuesta del servidor
 void procesarRespuestaServidor(String respuesta) {
     Serial.println();
     Serial.println("========================================");
@@ -657,10 +592,7 @@ void procesarRespuestaServidor(String respuesta) {
         return;
     }
 
-    // --------------------------------------------------------
     // Configuración recibida
-    // --------------------------------------------------------
-
     JsonObject configuracion = doc["configuracion"];
 
     if (!configuracion.isNull()) {
@@ -731,10 +663,8 @@ void procesarRespuestaServidor(String respuesta) {
     Serial.print("Intervalo telemetría: "); Serial.print(intervalo_telemetria); Serial.println("s");
 }
 
-// ============================================================
-// ENVIAR TELEMETRÍA AL SERVIDOR
-// ============================================================
 
+//enviamos datos al servidor
 bool enviarTelemetriaNodeRed(String payload) {
     conectarWiFi();
 
@@ -771,10 +701,7 @@ bool enviarTelemetriaNodeRed(String payload) {
     return false;
 }
 
-// ============================================================
-// EJECUTAR TELEMETRÍA
-// ============================================================
-
+//mostramos los datos en la terminal de arduinoide
 void ejecutarEnvioTelemetria(const String& motivo) {
     Serial.println();
     Serial.println("========================================");
@@ -802,10 +729,8 @@ void ejecutarEnvioTelemetria(const String& motivo) {
     enviarTelemetriaNodeRed(payload);
 }
 
-// ============================================================
-// SENSOR DE TEMPERATURA (CON FILTRO ANTI-RUIDO Y LECTURA ESTABLE)
-// ============================================================
 
+//sensor de temperatura
 void leerTemperatura() {
     if (millis() - previoLecturaTemp < 1000 && previoLecturaTemp != 0) {
         return;
@@ -815,7 +740,7 @@ void leerTemperatura() {
     sensors.requestTemperatures();
     float tempLeida = sensors.getTempCByIndex(0);
 
-    // 1. Filtrar lecturas basura: -127°C (desconectado) o 85°C (no convertido) o valores imposibles
+    // filtrar lecturas basura: -127°C (desconectado) o 85°C (no convertido) o valores imposibles
     if (tempLeida == DEVICE_DISCONNECTED_C || tempLeida == 85.0f || tempLeida < -50.0f || tempLeida > 100.0f) {
         lecturasFallidasTemp++;
         if (lecturasFallidasTemp % 10 == 0) {
@@ -824,7 +749,7 @@ void leerTemperatura() {
         return; // Conserva la temperaturaActual anterior sin corromperla con picos falsos
     }
 
-    // 2. Filtro de saltos bruscos (Picos de ruido OneWire ej: saltar de 20.8°C a -0.8°C en 1s)
+    // Filtro de saltos bruscos para evitar que salte de 20 grados a 0 de una
     if (temperaturaActual != 0.0 && abs(tempLeida - temperaturaActual) > 7.0f) {
         // Exige 2 lecturas consecutivas para validar un cambio real tan abrupto
         if (abs(tempLeida - ultimaLecturaValidaTemp) < 2.0f) {
@@ -840,9 +765,7 @@ void leerTemperatura() {
     lecturasFallidasTemp = 0;
 }
 
-// ============================================================
-// DETECTOR DE CORTE 4N25 (CON INPUT_PULLUP Y DEBOUNCE DE 2.5s)
-// ============================================================
+// Detector de cortes de corriente 4n25
 
 void procesarDetectorCorte() {
     int lectura = digitalRead(PIN_DETECTOR);
@@ -855,16 +778,13 @@ void procesarDetectorCorte() {
 
     // Solo confirmamos el cambio si la lectura se mantiene estable durante 2.5 segundos
     if ((millis() - ultimoCambioDetector) >= TIEMPO_DEBOUNCE_CORTE_MS) {
-        // HIGH = optoacoplador apagado / sin tensión (Corte de energía / Batería)
-        // LOW  = optoacoplador conduciendo (Red eléctrica activa)
+        // HIGH = Corte de energía / Batería
+        // LOW  = Red eléctrica activa
         enBateriaEnclavado = (lectura == VALOR_CORTE);
     }
 }
 
-// ============================================================
-// ALARMAS FÍSICAS (LED Y BUZZER TONO 2kHz)
-// ============================================================
-
+// alarmas fisicas (leds y buzzer)
 void procesarAlarmasFisicas() {
     bool alarmaTemperatura = alerta_temperatura_activa && (temperaturaActual < temp_min_segura || temperaturaActual > temp_max_segura);
     bool alarmaBateria = alerta_bateria_activa && enBateriaEnclavado;
@@ -880,7 +800,7 @@ void procesarAlarmasFisicas() {
             previoBuzzerMillis = millis();
             estadoBuzzer = !estadoBuzzer;
             if (estadoBuzzer) {
-                tone(PIN_BUZZER, 2000); // Emite tono de 2000 Hz en lugar de solo conmutar pin
+                tone(PIN_BUZZER, 2000); // Emite tono de 2000 Hz
             } else {
                 noTone(PIN_BUZZER);
             }
@@ -894,10 +814,7 @@ void procesarAlarmasFisicas() {
     }
 }
 
-// ============================================================
-// PROCESAR COMANDOS DEL MONITOR SERIAL
-// ============================================================
-
+//procesamos comandos en el monitor serial
 void procesarComandosSerial() {
     if (!Serial.available()) {
         return;
@@ -914,10 +831,7 @@ void procesarComandosSerial() {
     }
 }
 
-// ============================================================
-// SETUP
-// ============================================================
-
+//iniciamos todo
 void setup() {
     Serial.begin(115200);
     delay(1000);
@@ -927,7 +841,7 @@ void setup() {
     Serial.println("       FREEZERGUARD ESP32");
     Serial.println("========================================");
 
-    // Pines (CRÍTICO: INPUT_PULLUP previene pin flotante en 4N25 al estar desenchufado)
+    // Pines
     pinMode(LED_VERDE, OUTPUT);
     pinMode(LED_ROJO, OUTPUT);
     pinMode(PIN_BUZZER, OUTPUT);
@@ -960,16 +874,16 @@ void setup() {
     Serial.print("[ENERGIA] Estado inicial: ");
     Serial.println(enBateriaEnclavado ? "BATERIA / CORTE" : "RED");
 
-    // Módem SIMCOM A7670G
+    // Módem A7670G
     inicializarModemSMS();
 
     // WiFi
     conectarWiFi();
 
-    // Primera telemetría (obtiene parámetros del servidor como telefonos_sms, plantilla_sms_cuerpo y envio_sms_activo)
+    // Primera telemetría
     ejecutarEnvioTelemetria("INICIO");
 
-    // SMS de inicio (respetando configuración y número devuelto por backend)
+    // SMS de inicio
     if (modemOk && NUMERO_DESTINO_SMS.length() >= 3 && envio_sms_activo) {
         enviarSMSInicio();
     } else {
@@ -990,30 +904,28 @@ void setup() {
     previoImpresion = millis();
 }
 
-// ============================================================
-// LOOP PRINCIPAL
-// ============================================================
 
+//loop principal
 void loop() {
-    // 1. Comandos Serial
+    // Comandos Serial
     procesarComandosSerial();
 
-    // 2. Muestreo de Temperatura (no bloqueante + filtro anti-ruido)
+    // Temperatura
     leerTemperatura();
 
-    // 3. Detector de corte 4N25 (INPUT_PULLUP + debounce de 2.5s)
+    // Detector de corte 4N25
     procesarDetectorCorte();
 
-    // 4. Alarmas físicas (LEDs y Buzzer Tono 2kHz)
+    // Alarmas físicas
     procesarAlarmasFisicas();
 
-    // 5. Health Check periódico del módem (cada 60 segundos)
+    // Health Check periódico del módem
     verificarSaludModem();
 
-    // 6. Monitorear disparo de SMS por Temperatura Fuera de Rango
+    // Monitorear disparo de SMS por Temperatura Fuera de Rango
     verificarAlertaTemperaturaSMS();
 
-    // 7. Detectar cambio de estado de energía (Corte / Restauración)
+    // Detectar cambio de estado de energía
     if (enBateriaEnclavado != estadoBateriaAnterior) {
         if (enBateriaEnclavado) {
             Serial.println();
@@ -1021,7 +933,7 @@ void loop() {
             Serial.println("⚠ CORTE DE CORRIENTE DETECTADO");
             Serial.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 
-            // SMS de alerta por corte (Prioritario: ignora cooldown)
+            // SMS de alerta por corte
             enviarSMSAlertaCorte(true);
 
             // Telemetría inmediata al servidor
@@ -1032,7 +944,7 @@ void loop() {
             Serial.println("✓ CORRIENTE RESTAURADA");
             Serial.println("========================================");
 
-            // SMS de notificación por restauración (Prioritario: ignora cooldown)
+            // SMS de notificación por restauración
             enviarSMSAlertaCorte(false);
 
             // Telemetría inmediata al servidor
@@ -1042,7 +954,7 @@ void loop() {
         estadoBateriaAnterior = enBateriaEnclavado;
     }
 
-    // 8. Monitoreo por consola serial periódicamente
+    // Monitoreo por consola
     if (millis() - previoImpresion >= 1000) {
         previoImpresion = millis();
 
@@ -1054,7 +966,7 @@ void loop() {
         Serial.println(modemOk ? "OK" : "ERROR");
     }
 
-    // 9. Telemetría periódica programada
+    // Telemetría periódica programada
     unsigned long intervaloMs = (unsigned long)(intervalo_telemetria > 0 ? intervalo_telemetria : 5) * 1000UL;
 
     if (millis() - previoMillis >= intervaloMs) {
@@ -1062,5 +974,5 @@ void loop() {
         ejecutarEnvioTelemetria("PERIODICA");
     }
 
-    delay(10); // Pequeña pausa para ceder CPU y reducir consumo
+    delay(10);
 }
