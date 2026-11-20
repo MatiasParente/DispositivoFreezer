@@ -23,7 +23,7 @@ const char* WIFI_PASSWORD = ""; //contraseña
 const int DEVICE_ID = 1; //identificación del dispositivo, cambia el número para ser otro dispositivo independiente
 
 const char* SERVER_URL = "https://tip-proymf26.tipyenaccion.net/api/telemetry"; //url para el servidor
-const char* API_KEY = "fg_sec_9nQBt2sF1bLJAEGlR"; //api key (leer manual de instalación)
+const char* API_KEY = ""; //api key (leer manual de instalación)
 
 
 // MODEM A7670G
